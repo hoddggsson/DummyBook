@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DummyBook</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      overflow-x: hidden;
+      background-color: #fff;
+      color: #000;
+    }
+    .container {
+      display: flex;
+      overflow-x: auto;
+      white-space: nowrap;
+      padding: 20px;
+      scroll-behavior: smooth;
+    }
+    .spread {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      flex: 0 0 auto;
+      margin-right: 20px;
+    }
+    .spread-title {
+      font-weight: bold;
+    }
+    .spread-body {
+      /* This container holds everything that moves */
+    }
+    .spread-content {
+      display: flex;
+      gap: 0;
+    }
+    .text-box {
+      width: 300px;
+      height: 400px;
+      padding: 20px;
+      border: 1px solid #ccc;
+      background: #f9f9f9;
+      overflow: auto;
+      font-size: 16px;
+      white-space: pre-wrap;
+      outline: none;
+      color: #000;
+    }
+    .notes-box {
+      display: block;
+      width: 600px;
+      height: 50px;
+      padding: 20px;
+      border: 1px solid #999;
+      background: #f1f1f1;
+      font-size: 14px;
+      color: #666;
+      outline: none;
+      margin: 17px auto; /* 10px margin on top and bottom, centered horizontally */
+    }
+    .dark-mode {
+      background-color: #222;
+      color: #fff;
+    }
+    .dark-mode .text-box {
+      background: #333;
+      color: #ddd;
+      border: 1px solid #555;
+    }
+    .dark-mode .notes-box {
+      background: #444;
+      color: #bbb;
+      border: 1px solid #666;
+    }
+    .spread-buttons {
+      display: flex;
+      gap: 5px;
+      justify-content: center; /* Center the swap buttons */
+      width: 100%;
+      margin-top: 10px; /* Added vertical breathing room */
+    }
+    .spread-buttons button {
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    .controls {
+      position: fixed;
+      bottom: 40px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+    }
+    .button {
+      padding: 10px 20px;
+      background: #C8A2C8;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="container"></div>
+  <div class="controls">
+    <button class="button" onclick="toggleDarkMode()">Toggle Dark Mode</button>
+    <button class="button" onclick="saveText()">Save</button>
+    <button class="button" onclick="loadText()">Load</button>
+    <button class="button" onclick="exportPDF()">Export as PDF</button>
+    <button class="button" onclick="addSpread()">+</button>
+    <button class="button" onclick="removeSpread()">-</button>
+  </div>
+  <input type="file" id="fileInput" style="display:none" onchange="loadText(event)">
+  <script>
+    // Create a spread with a fixed title and an inner body that can be swapped.
+    function createSpread(index) {
+      let spread = document.createElement("div");
+      spread.className = "spread";
+      spread.innerHTML = `
+        <div class="spread-title">Spread ${String(index + 1).padStart(2, '0')}</div>
+        <div class="spread-body">
+          <div class="spread-content">
+            <div class="text-box" contenteditable="true" onpaste="handlePaste(event)"></div>
+            <div class="text-box" contenteditable="true" onpaste="handlePaste(event)"></div>
+          </div>
+          <textarea class="notes-box" placeholder="Notes for this spread..."></textarea>
+          <div class="spread-buttons">
+            <button onclick="moveSpreadLeft(this)">&lt;</button>
+            <button onclick="moveSpreadRight(this)">&gt;</button>
+          </div>
+        </div>
+      `;
+      return spread;
+    }
+    
+    function initializeSpreads() {
+      let container = document.getElementById("container");
+      container.innerHTML = "";
+      for (let i = 0; i < 16; i++) {
+        container.appendChild(createSpread(i));
+      }
+    }
+    
+    // Paste as plain text.
+    function handlePaste(event) {
+      event.preventDefault();
+      let text = (event.clipboardData || window.clipboardData).getData("text");
+      document.execCommand("insertText", false, text);
+    }
+    
+    // Swap only the spread body between adjacent spreads.
+    function moveSpreadLeft(button) {
+      let spread = button.closest(".spread");
+      let prevSpread = spread.previousElementSibling;
+      if (prevSpread) {
+        let currentBody = spread.querySelector(".spread-body");
+        let prevBody = prevSpread.querySelector(".spread-body");
+        let temp = document.createElement("div");
+        currentBody.parentNode.insertBefore(temp, currentBody);
+        prevBody.parentNode.insertBefore(currentBody, prevBody);
+        temp.parentNode.insertBefore(prevBody, temp);
+        temp.parentNode.removeChild(temp);
+      }
+    }
+    
+    function moveSpreadRight(button) {
+      let spread = button.closest(".spread");
+      let nextSpread = spread.nextElementSibling;
+      if (nextSpread) {
+        let currentBody = spread.querySelector(".spread-body");
+        let nextBody = nextSpread.querySelector(".spread-body");
+        let temp = document.createElement("div");
+        currentBody.parentNode.insertBefore(temp, currentBody);
+        nextBody.parentNode.insertBefore(currentBody, nextBody);
+        temp.parentNode.insertBefore(nextBody, temp);
+        temp.parentNode.removeChild(temp);
+      }
+    }
+    
+    function toggleDarkMode() {
+      document.body.classList.toggle("dark-mode");
+    }
+    
+    function saveText() {
+      let fileName = prompt("Enter file name:", "spreads");
+      if (!fileName) return;
+      let spreads = document.querySelectorAll('.spread');
+      let data = [];
+      spreads.forEach(spread => {
+        let texts = spread.querySelectorAll('.text-box');
+        data.push([texts[0].innerText, texts[1].innerText]);
+      });
+      let blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      let a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = fileName + ".json";
+      a.click();
+    }
+    
+    function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      let doc = new jsPDF({ orientation: "portrait" });
+      let spreads = document.querySelectorAll('.spread');
+      spreads.forEach((spread, i) => {
+        let texts = spread.querySelectorAll('.text-box');
+        doc.text(`Spread ${i + 1}`, 10, 10);
+        doc.text(texts[0].innerText, 10, 20);
+        doc.text(texts[1].innerText, 10, 30);
+        if (i < spreads.length - 1) doc.addPage();
+      });
+      let fileName = prompt("Enter PDF file name:", "spreads");
+      if (!fileName) return;
+      doc.save(fileName + ".pdf");
+    }
+    
+    document.querySelector("button[onclick='loadText()']").onclick = () =>
+      document.getElementById("fileInput").click();
+    
+    function loadText(event) {
+      let file = event.target.files[0];
+      if (!file) return;
+      let reader = new FileReader();
+      reader.onload = function(e) {
+        let data = JSON.parse(e.target.result);
+        let container = document.getElementById("container");
+        container.innerHTML = "";
+        data.forEach((spreadData, i) => {
+          let spread = createSpread(i);
+          let texts = spread.querySelectorAll('.text-box');
+          texts[0].innerText = spreadData[0];
+          texts[1].innerText = spreadData[1];
+          container.appendChild(spread);
+        });
+      };
+      reader.readAsText(file);
+    }
+    
+    function addSpread() {
+      let container = document.getElementById("container");
+      let index = container.children.length;
+      container.appendChild(createSpread(index));
+    }
+    
+    function removeSpread() {
+      let container = document.getElementById("container");
+      if (container.children.length > 0) {
+        container.removeChild(container.lastElementChild);
+      }
+    }
+    
+    initializeSpreads();
+  </script>
+</body>
+</html>
